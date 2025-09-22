@@ -132,3 +132,22 @@ function array_remove_value(_array, _value) {
     }
     return false;
 }
+
+function array_shuffle_ext(_array) {
+    var _count = array_length(_array);
+    if (_count <= 1) return;
+
+    for (var _i = _count - 1; _i > 0; _i--) {
+        var _swap_index = irandom(_i);
+        if (_swap_index == _i) continue;
+
+        var _temp = _array[_i];
+        _array[_i] = _array[_swap_index];
+        _array[_swap_index] = _temp;
+    }
+}
+
+function struct_exists(_struct, _name) {
+    if (!is_struct(_struct)) return false;
+    return variable_struct_exists(_struct, _name);
+}

@@ -13,6 +13,19 @@ enemy_is_boss = false;
 velocity_x = 0;
 velocity_y = 0;
 base_speed = enemy_speed;
+zigzag_phase = random(360);
+zigzag_speed = 0;
+zigzag_amplitude = 0;
+
+// Behavioural state
+type_configured = false;
+split_children_count = 0;
+split_spawned = false;
+magnet_range = 0;
+magnet_strength = 0;
+shield_arc = 0;
+shield_facing = 270;
+shield_spin = 0;
 
 // Status effects
 slow_timer = 0;

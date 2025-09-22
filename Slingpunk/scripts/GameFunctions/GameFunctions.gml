@@ -1,52 +1,93 @@
 // Utility functions
 function spawn_particles(_x, _y, _color, _count, _speed, _radius) {
+    if (_count <= 0) return;
 
+    var controller = instance_find(obj_Game, 0);
+    if (controller == noone) return;
+
+    var dt = 1 / 60;
+
+    with (controller) {
+        for (var i = 0; i < _count; i++) {
+            var angle = random(360);
+            var distance = random_range_value(0, max(0, _radius * 0.2));
+            var part_speed = random_range_value(_speed * 0.4, _speed);
+            var life = random_range_value(0.35, 0.85);
+
+            var particle = {
+                x: _x + lengthdir_x(distance, angle),
+                y: _y + lengthdir_y(distance, angle),
+                vx: lengthdir_x(part_speed, angle) * dt,
+                vy: lengthdir_y(part_speed, angle) * dt,
+                life: life,
+                max_life: life,
+                size: random_range_value(4, 10),
+                color: _color,
+                friction: random_range_value(0.85, 0.93)
+            };
+
+            array_push(particles, particle);
+        }
+    }
 }
 
 function spawn_impact_wave(_x, _y, _max_radius, _duration, _color) {
-    var wave = {
-        x: _x,
-        y: _y,
-        life: _duration,
-        max_life: _duration,
-        max_radius: _max_radius,
-        color: _color
-    };
-    array_push(impact_waves, wave);
+    var controller = instance_find(obj_Game, 0);
+    if (controller == noone) return;
+
+    with (controller) {
+        var wave = {
+            x: _x,
+            y: _y,
+            life: _duration,
+            max_life: _duration,
+            max_radius: _max_radius,
+            color: _color
+        };
+        array_push(impact_waves, wave);
+    }
 }
 
-function compute_orb_damage(_orb, _enemy) {
+function compute_orb_damage(_orb, _enemy, _modifiers, _combo_heat, _difficulty) {
     if (!instance_exists(_orb) || !instance_exists(_enemy)) return 0;
 
-    var damage = _orb.orb_damage * modifiers.damageMultiplier;
+    var damage = _orb.orb_damage;
 
-    // Combo heat damage bonus
-    if (modifiers.comboHeatDamagePercent > 0) {
-        var combo_multiplier = 1 + max(0, combo_heat) * modifiers.comboHeatDamagePercent;
-        damage *= combo_multiplier;
+    if (!is_undefined(_modifiers)) {
+        damage *= _modifiers.damageMultiplier;
+
+        // Combo heat damage bonus
+        if (_modifiers.comboHeatDamagePercent > 0) {
+            var combo_multiplier = 1 + max(0, _combo_heat) * _modifiers.comboHeatDamagePercent;
+            damage *= combo_multiplier;
+        }
+
+        // Bounce damage bonus
+        if (_modifiers.bounceDamagePercent > 0 && _orb.orb_bounce_count > 0) {
+            damage *= 1 + _orb.orb_bounce_count * _modifiers.bounceDamagePercent;
+        }
+
+        // Boss damage multiplier
+        if ((_enemy.enemy_is_boss || _enemy.enemy_is_elite) && _modifiers.bossDamageMultiplier > 1) {
+            damage *= _modifiers.bossDamageMultiplier;
+        }
+
+        // Wall hit damage bonus
+        if (_orb.orb_pending_wall_damage_bonus > 0) {
+            damage *= 1 + _orb.orb_pending_wall_damage_bonus;
+            _orb.orb_pending_wall_damage_bonus = 0;
+        }
+
+        // Tier damage bonus (flat addition per tier)
+        var tier = floor(_combo_heat / 5);
+        damage += tier * _modifiers.comboDamagePerTier;
     }
 
-    // Bounce damage bonus
-    if (modifiers.bounceDamagePercent > 0 && _orb.orb_bounce_count > 0) {
-        damage *= 1 + _orb.orb_bounce_count * modifiers.bounceDamagePercent;
+    if (!is_undefined(_difficulty)) {
+        damage *= _difficulty.playerDamageMultiplier;
     }
 
-    // Boss damage multiplier
-    if ((_enemy.enemy_is_boss || _enemy.enemy_is_elite) && modifiers.bossDamageMultiplier > 1) {
-        damage *= modifiers.bossDamageMultiplier;
-    }
-
-    // Wall hit damage bonus
-    if (_orb.orb_pending_wall_damage_bonus > 0) {
-        damage *= 1 + _orb.orb_pending_wall_damage_bonus;
-        _orb.orb_pending_wall_damage_bonus = 0;
-    }
-
-    // Tier damage bonus
-    var tier = floor(combo_heat / 5);
-    damage += tier * modifiers.comboDamagePerTier;
-
-    return damage * difficulty.playerDamageMultiplier;
+    return damage;
 }
 
 // Enemy behavior function (to be overridden)
@@ -389,6 +430,7 @@ function simple_wave_spawning() {
         enemy.enemy_hp = 1 + wave_number;
         enemy.enemy_max_hp = enemy.enemy_hp;
         enemy.enemy_speed = BASE_ENEMY_SPEED + wave_number * 5;
+        enemy_apply_type_profile(enemy);
     }
 }
 
@@ -397,6 +439,10 @@ function update_particles() {
     for (var i = array_length(particles) - 1; i >= 0; i--) {
         var particle = particles[i];
         particle.life -= 1/60;
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.vx *= particle.friction;
+        particle.vy *= particle.friction;
         if (particle.life <= 0) {
             array_delete(particles, i, 1);
         }
@@ -523,5 +569,120 @@ function init_background() {
             color: choose(c_aqua, c_fuchsia, c_lime)
         };
         array_push(background_stars, star);
+    }
+}
+
+function enemy_apply_type_profile(_enemy) {
+    if (!instance_exists(_enemy)) return;
+
+    with (_enemy) {
+        if (type_configured) return;
+
+        zigzag_phase = random(360);
+        zigzag_speed = 0;
+        zigzag_amplitude = 0;
+        magnet_strength = 0;
+        magnet_range = 0;
+        shield_arc = 0;
+        shield_facing = 270;
+        split_children_count = 0;
+
+        switch (enemy_type) {
+            case EnemyKind.GLOOB_ZIGZAG:
+                visual_kind = "organic";
+                accent_color = c_fuchsia;
+                enemy_radius = max(enemy_radius, 28);
+                zigzag_amplitude = 90;
+                zigzag_speed = 360;
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.9);
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 4;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            case EnemyKind.SPLITTER_GLOOB:
+                visual_kind = "organic";
+                accent_color = make_color_rgb(255, 170, 80);
+                enemy_radius = max(enemy_radius, 30);
+                zigzag_amplitude = 70;
+                zigzag_speed = 280;
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.85);
+                split_children_count = 2;
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 5;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            case EnemyKind.SPLITTERLING:
+                visual_kind = "organic";
+                accent_color = make_color_rgb(255, 180, 110);
+                enemy_radius = max(18, enemy_radius * 0.65);
+                zigzag_amplitude = 56;
+                zigzag_speed = 340;
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 1.1);
+                enemy_max_hp = max(1, enemy_max_hp);
+                enemy_hp = max(1, enemy_hp);
+                break;
+
+            case EnemyKind.SHIELDY_GLOOB:
+                visual_kind = "mechanical";
+                accent_color = c_aqua;
+                secondary_color = c_dkgray;
+                enemy_radius = max(enemy_radius, 34);
+                shield_arc = 140;
+                shield_facing = 270;
+                enemy_shield = max(enemy_shield, 3);
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.9);
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 6;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            case EnemyKind.MAGNETRON:
+                visual_kind = "mechanical";
+                accent_color = c_lime;
+                secondary_color = c_dkgray;
+                enemy_radius = max(enemy_radius, 32);
+                zigzag_amplitude = 48;
+                zigzag_speed = 220;
+                magnet_range = 220;
+                magnet_strength = 360;
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.75);
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 6;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            default:
+                base_speed = max(base_speed, enemy_speed);
+        }
+
+        base_speed = max(base_speed, 40);
+        type_configured = true;
+    }
+}
+
+function enemy_spawn_splitlings(_enemy) {
+    if (!instance_exists(_enemy)) return;
+
+    with (_enemy) {
+        if (split_children_count <= 0) return;
+
+        var spread = max(20, enemy_radius);
+        for (var i = 0; i < split_children_count; i++) {
+            var offset = (i - (split_children_count - 1) * 0.5) * spread * 0.6;
+            var child = instance_create_layer(x + offset, y, "Instances", obj_Enemy);
+            child.enemy_type = EnemyKind.SPLITTERLING;
+            child.enemy_hp = 1;
+            child.enemy_max_hp = 1;
+            child.enemy_speed = BASE_ENEMY_SPEED * 1.2;
+            child.enemy_radius = max(16, enemy_radius * 0.6);
+            child.type_configured = false;
+            enemy_apply_type_profile(child);
+        }
     }
 }
