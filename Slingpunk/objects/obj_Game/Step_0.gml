@@ -7,6 +7,11 @@ launch_cooldown = 0; //max(0, launch_cooldown - 1/60);
 combo_timer += 1/60;
 wave_intro_delay = max(0, wave_intro_delay - 1/60);
 
+// Update modifier timers
+if (!is_undefined(modifiers.chainLightning)) {
+    modifiers.chainLightning.cooldown = max(0, modifiers.chainLightning.cooldown - 1/60);
+}
+
 // Handle input
 handle_input();
 

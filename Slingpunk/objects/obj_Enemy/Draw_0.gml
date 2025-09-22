@@ -43,6 +43,11 @@ if (enemy_shield > 0) {
     draw_set_alpha(shield_alpha);
     draw_set_color(c_aqua);
     draw_circle(x, y, radius + 16, true);
+
+    if (shield_arc > 0) {
+        draw_set_alpha(shield_alpha + 0.1);
+        draw_circle_arc(x, y, radius + 20, shield_facing - shield_arc * 0.5, shield_facing + shield_arc * 0.5, 6);
+    }
 }
 
 // Slow effect
@@ -51,6 +56,13 @@ if (slow_timer > 0) {
     draw_set_alpha(0.2 + slow_ratio * 0.45);
     draw_set_color(c_blue);
     draw_circle(x, y, radius + 20, true);
+}
+
+// Magnetron field hint
+if (enemy_type == EnemyKind.MAGNETRON && magnet_range > 0) {
+    draw_set_alpha(0.05);
+    draw_set_color(c_lime);
+    draw_circle(x, y, magnet_range, true);
 }
 
 draw_set_alpha(1);
