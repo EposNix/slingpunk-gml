@@ -50,3 +50,4 @@ draw_circle(x + radius * 0.15, y - radius * 0.2, radius * 0.4, false);
 
 draw_set_alpha(1);
 draw_self();
+draw_text(50, 200, vector2_length(Vector2(velocity_x, velocity_y)));

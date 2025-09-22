@@ -57,7 +57,7 @@ function orb_hit_enemy(_enemy) {
                 }
 
                 orb_bounce_count += 1;
-                var bounce_speed = max(220, vector2_length(Vector2(velocity_x, velocity_y)) * 0.6);
+                var bounce_speed = max(220, vector2_length(Vector2(velocity_x, velocity_y)) * 0.9);
                 var bounce_dir = point_direction(_enemy.x, _enemy.y, x, y) + 180;
                 velocity_x = lengthdir_x(bounce_speed, bounce_dir);
                 velocity_y = lengthdir_y(bounce_speed, bounce_dir);
@@ -155,8 +155,8 @@ function orb_hit_enemy(_enemy) {
         var impact_radius = _enemy.enemy_radius + 12;
         var impact_wave_radius = _enemy.enemy_radius + 20;
         with (controller) {
-            spawn_particles(impact_x, impact_y, orb_color, 10, 320, impact_radius);
-            spawn_impact_wave(impact_x, impact_y, impact_wave_radius, 0.3, orb_color);
+            spawn_particles(impact_x, impact_y, c_aqua, 10, 320, impact_radius);
+            spawn_impact_wave(impact_x, impact_y, impact_wave_radius, 0.3, c_aqua);
         }
     }
 
@@ -170,7 +170,7 @@ function orb_hit_enemy(_enemy) {
     var dx = x - _enemy.x;
     var dy = y - _enemy.y;
     var dir = vector2_normalize(Vector2(dx, dy));
-    var Speed = vector2_length(Vector2(velocity_x, velocity_y)) * 0.7 + 320;
+    var Speed = vector2_length(Vector2(velocity_x, velocity_y)) * .9 + 320;
     velocity_x = dir.x * Speed;
     velocity_y = dir.y * Speed;
 }

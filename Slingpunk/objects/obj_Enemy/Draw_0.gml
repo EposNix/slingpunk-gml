@@ -66,3 +66,4 @@ if (enemy_type == EnemyKind.MAGNETRON && magnet_range > 0) {
 }
 
 draw_set_alpha(1);
+draw_self();
