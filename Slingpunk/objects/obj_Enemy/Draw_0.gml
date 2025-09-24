@@ -65,5 +65,21 @@ if (enemy_type == EnemyKind.MAGNETRON && magnet_range > 0) {
     draw_circle(x, y, magnet_range, true);
 }
 
+// Warp flash indicator
+if (enemy_type == EnemyKind.WARP_STALKER && warp_flash_timer > 0) {
+    var warp_ratio = warp_flash_timer / 0.3;
+    draw_set_alpha(0.18 + warp_ratio * 0.32);
+    draw_set_color(accent_color);
+    draw_circle(x, y, radius + 26 + warp_ratio * 18, true);
+}
+
+// Support pulse
+if (enemy_type == EnemyKind.AEGIS_SENTINEL && support_flash > 0) {
+    var support_ratio = support_flash / 0.35;
+    draw_set_alpha(0.15 + support_ratio * 0.4);
+    draw_set_color(accent_color);
+    draw_circle(x, y, radius + 30, true);
+}
+
 draw_set_alpha(1);
 draw_self();

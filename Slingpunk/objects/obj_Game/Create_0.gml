@@ -44,6 +44,13 @@ modifiers = ModifierState();
 // Wave management
 wave_manager_active = false;
 wave_intro_delay = 0;
+wave_blueprints = [];
+wave_spawn_events = [];
+wave_spawn_index = 0;
+wave_elapsed = 0;
+wave_break_timer = 0;
+current_wave_state = undefined;
+wave_preview_text = "";
 
 // Screen effects
 screen_shake_x = 0;
@@ -64,6 +71,9 @@ difficulty = DifficultyDefinition("normal", "Normal", "Balanced challenge",
 
 // Initialize background
 init_background();
+
+// Setup wave data
+init_wave_manager();
 
 // Start the game
 start_game();

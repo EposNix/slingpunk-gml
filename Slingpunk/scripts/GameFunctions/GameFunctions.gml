@@ -321,6 +321,12 @@ function draw_ui() {
     draw_set_color(c_white);
     draw_rectangle(bar_x, bar_y, bar_x + bar_width, bar_y + bar_height, true);
     draw_text(bar_x, bar_y - 25, nova_name);
+
+    if (wave_preview_text != "" && (wave_intro_delay > 0 || wave_break_timer > 0)) {
+        draw_set_halign(fa_center);
+        draw_text(room_width / 2, bar_y + 70, "Next Wave: " + wave_preview_text);
+        draw_set_halign(fa_left);
+    }
 }
 
 function handle_input() {
@@ -419,19 +425,329 @@ function activate_nova_pulse() {
     add_screen_shake(9, 0.55);
 }
 
-function simple_wave_spawning() {
-    // Simple enemy spawning every few seconds
-    if (current_time % 3000 < 50) { // Every 3 seconds approximately
-        var lane = irandom_range(1, 6);
-        var spawn_pos = lane_to_world(lane, room_width);
+function init_wave_manager() {
+    wave_blueprints = build_wave_blueprints();
+    wave_spawn_events = [];
+    wave_spawn_index = 0;
+    wave_elapsed = 0;
+    wave_break_timer = 0.75;
+    current_wave_state = undefined;
+    wave_preview_text = "";
+    wave_intro_delay = 0;
+}
 
-        var enemy = instance_create_layer(spawn_pos.x, spawn_pos.y, "Instances", obj_Enemy);
-        enemy.enemy_type = choose(EnemyKind.GLOOB_ZIGZAG, EnemyKind.SPLITTER_GLOOB, EnemyKind.SHIELDY_GLOOB);
-        enemy.enemy_hp = 1 + wave_number;
-        enemy.enemy_max_hp = enemy.enemy_hp;
-        enemy.enemy_speed = BASE_ENEMY_SPEED + wave_number * 5;
-        enemy_apply_type_profile(enemy);
+function build_wave_blueprints() {
+    var waves = [];
+
+    var opening = WaveBlueprint("Opening Salvo", 1.0, [
+        WaveEnemyConfig(EnemyKind.GLOOB_ZIGZAG, 3, [2, 3, 4, 5], 6, 0.45, 1, 0),
+        WaveEnemyConfig(EnemyKind.SPLITTER_GLOOB, 4, [3, 4], 2, 1.4, 0.9, 0.05, 0.6)
+    ]);
+    array_push(waves, opening);
+
+    var splitters = WaveBlueprint("Splitter Sweep", 1.2, [
+        WaveEnemyConfig(EnemyKind.SPLITTER_GLOOB, 5, [2, 5], 3, 1.1, 0.85, 0.08, 0.2),
+        WaveEnemyConfig(EnemyKind.GLOOB_ZIGZAG, 4, [1, 3, 4, 6], 4, 0.6, 1.05, 0)
+    ]);
+    array_push(waves, splitters);
+
+    var spores = WaveBlueprint("Spore Drift", 1.4, [
+        WaveEnemyConfig(EnemyKind.SPORE_PUFF, 5, [2, 3, 5], 3, 1.6, 0.7, 0.12, 0.4),
+        WaveEnemyConfig(EnemyKind.SPLITTERLING, 2, -1, 6, 0.35, 1.1, 0)
+    ]);
+    array_push(waves, spores);
+
+    var shields = WaveBlueprint("Shield Wall", 1.5, [
+        WaveEnemyConfig(EnemyKind.SHIELDY_GLOOB, 7, [3, 4], 3, 1.3, 0.8, 0.15, 0.3),
+        WaveEnemyConfig(EnemyKind.BULWARK_GLOOB, 9, [2, 5], 2, 2.0, 0.65, 0.2, 0.8)
+    ]);
+    array_push(waves, shields);
+
+    var flux = WaveBlueprint("Flux Field", 1.3, [
+        WaveEnemyConfig(EnemyKind.MAGNETRON, 6, [2, 3, 4, 5], 4, 0.8, 0.9, 0.12, 0.2),
+        WaveEnemyConfig(EnemyKind.WARP_STALKER, 6, -1, 3, 1.1, 1.1, 0.18, 0.6)
+    ]);
+    array_push(waves, flux);
+
+    var guardians = WaveBlueprint("Guardian Phalanx", 1.6, [
+        WaveEnemyConfig(EnemyKind.AEGIS_SENTINEL, 8, [3, 4], 2, 1.6, 0.75, 0.22, 0.4),
+        WaveEnemyConfig(EnemyKind.BULWARK_GLOOB, 10, [2, 5], 3, 1.8, 0.7, 0.28, 0.9),
+        WaveEnemyConfig(EnemyKind.SPORE_PUFF, 6, [1, 6], 2, 1.8, 0.7, 0.14, 0.6)
+    ]);
+    array_push(waves, guardians);
+
+    return waves;
+}
+
+function build_dynamic_wave(_wave_number) {
+    var pool = [
+        EnemyKind.GLOOB_ZIGZAG,
+        EnemyKind.SPLITTER_GLOOB,
+        EnemyKind.SHIELDY_GLOOB,
+        EnemyKind.MAGNETRON,
+        EnemyKind.SPORE_PUFF,
+        EnemyKind.BULWARK_GLOOB,
+        EnemyKind.WARP_STALKER,
+        EnemyKind.AEGIS_SENTINEL
+    ];
+    array_shuffle_ext(pool);
+
+    var group_count = clamp(2 + floor((_wave_number - 1) / 2), 2, 6);
+    var configs = [];
+
+    for (var i = 0; i < group_count; i++) {
+        var type_index = i % array_length(pool);
+        var enemy_type = pool[type_index];
+        var lane_pattern = choose(-1, [2, 3, 4, 5], [2, 5], [3, 4], "edges", "center");
+        var base_hp = 4 + round(_wave_number * 0.9);
+        var cadence = max(0.35, 1.2 - _wave_number * 0.05);
+        var count = clamp(3 + floor(_wave_number * 0.45), 3, 12);
+        var speed_scale = 1;
+        var elite_chance = 0.08 + min(0.3, _wave_number * 0.01);
+
+        switch (enemy_type) {
+            case EnemyKind.BULWARK_GLOOB:
+                base_hp += 6;
+                cadence += 0.5;
+                count = max(2, floor(count * 0.6));
+                speed_scale = 0.7;
+                elite_chance += 0.1;
+                break;
+
+            case EnemyKind.SPORE_PUFF:
+                base_hp -= 2;
+                cadence += 0.4;
+                count += 1;
+                speed_scale = 0.75;
+                break;
+
+            case EnemyKind.MAGNETRON:
+                speed_scale = 0.85;
+                break;
+
+            case EnemyKind.WARP_STALKER:
+                speed_scale = 1.15;
+                cadence += 0.2;
+                break;
+
+            case EnemyKind.AEGIS_SENTINEL:
+                base_hp += 4;
+                cadence += 0.6;
+                count = max(2, floor(count * 0.5));
+                elite_chance += 0.12;
+                break;
+        }
+
+        var config = WaveEnemyConfig(enemy_type, base_hp, lane_pattern, count, cadence, speed_scale, elite_chance, i * 0.4);
+        array_push(configs, config);
     }
+
+    var name = "Endless Pattern " + string(_wave_number);
+    var intro = clamp(1.0 + (group_count - 2) * 0.1, 0.8, 1.8);
+    return WaveBlueprint(name, intro, configs);
+}
+
+function prepare_wave_events(_blueprint) {
+    var events = [];
+    var scaling = enemy_scaling;
+
+    for (var i = 0; i < array_length(_blueprint.enemies); i++) {
+        var config = _blueprint.enemies[i];
+        var spawn_time = max(0, config.spawnOffset);
+        var cadence = max(0.18, config.cadence);
+        if (scaling.cadenceMultiplier > 0) {
+            cadence = max(0.12, cadence / scaling.cadenceMultiplier);
+        }
+
+        var count = max(1, round(config.count * scaling.countMultiplier));
+
+        for (var j = 0; j < count; j++) {
+            var event_lane = resolve_wave_lane(config.lane, j);
+            var event = {
+                time: spawn_time,
+                type: config.type,
+                lane: event_lane,
+                hp: max(1, round((config.hp + scaling.hpBonus) * scaling.hpMultiplier)),
+                speedMultiplier: max(0.4, config.speedScale) * scaling.speedMultiplier,
+                elite: (config.eliteChance > 0) && (random(1) < config.eliteChance),
+                jitter: random_range_value(-18, 18)
+            };
+            array_push(events, event);
+            spawn_time += cadence;
+        }
+    }
+
+    var event_count = array_length(events);
+    for (var a = 0; a < event_count - 1; a++) {
+        for (var b = a + 1; b < event_count; b++) {
+            if (events[a].time > events[b].time) {
+                var tmp = events[a];
+                events[a] = events[b];
+                events[b] = tmp;
+            }
+        }
+    }
+
+    return events;
+}
+
+function resolve_wave_lane(_lane, _index) {
+    if (is_array(_lane)) {
+        var lane_array = _lane;
+        if (array_length(lane_array) > 0) {
+            var lane_count = array_length(lane_array);
+            var lane_index = _index mod lane_count;
+            return clamp_value(lane_array[lane_index], 1, 6);
+        }
+    }
+
+    if (is_string(_lane)) {
+        switch (_lane) {
+            case "edges":
+                return choose(1, 6);
+            case "center":
+                return choose(3, 4);
+            case "inner":
+                return choose(2, 5);
+        }
+    }
+
+    if (!is_real(_lane) || _lane <= 0) {
+        return irandom_range(1, 6);
+    }
+
+    return clamp_value(round(_lane), 1, 6);
+}
+
+function spawn_enemy_from_event(_event) {
+    var spawn_pos = lane_to_world(_event.lane, room_width);
+    spawn_pos.x += _event.jitter;
+
+    var enemy = instance_create_layer(spawn_pos.x, spawn_pos.y, "Instances", obj_Enemy);
+    enemy.enemy_type = _event.type;
+    enemy.enemy_hp = _event.hp;
+    enemy.enemy_max_hp = _event.hp;
+    enemy.enemy_speed = BASE_ENEMY_SPEED * _event.speedMultiplier;
+    enemy.base_speed = enemy.enemy_speed;
+    enemy.enemy_is_elite = _event.elite;
+    enemy.type_configured = false;
+
+    enemy_apply_type_profile(enemy);
+
+    if (_event.elite) {
+        enemy.enemy_hp = ceil(enemy.enemy_hp * 1.35);
+        enemy.enemy_max_hp = enemy.enemy_hp;
+        if (enemy.enemy_shield > 0) {
+            enemy.enemy_shield = ceil(enemy.enemy_shield * 1.2) + 1;
+        }
+        enemy.base_speed *= 1.05;
+    }
+}
+
+function announce_wave(_wave_number, _blueprint) {
+    spawn_floating_text("Wave " + string(_wave_number), room_width / 2, 120, c_white);
+    if (_blueprint.waveId != "") {
+        var detail = _blueprint.waveId;
+        spawn_floating_text(detail, room_width / 2, 150, c_aqua);
+    }
+}
+
+function start_next_wave() {
+    var target_wave = completed_waves + 1;
+    var blueprint = undefined;
+
+    if (target_wave <= array_length(wave_blueprints)) {
+        blueprint = wave_blueprints[target_wave - 1];
+    } else {
+        blueprint = build_dynamic_wave(target_wave);
+    }
+
+    wave_spawn_events = prepare_wave_events(blueprint);
+    wave_spawn_index = 0;
+    wave_elapsed = 0;
+    wave_preview_text = blueprint.waveId;
+    current_wave_state = {
+        blueprint: blueprint,
+        wave_number: target_wave,
+        cleared: false
+    };
+
+    wave_intro_delay = max(0.5, blueprint.spawnSeconds);
+    wave_break_timer = 0;
+    wave_number = target_wave;
+
+    announce_wave(target_wave, blueprint);
+}
+
+function update_wave_manager() {
+    var dt = 1 / 60;
+
+    if (wave_break_timer > 0) {
+        wave_break_timer = max(0, wave_break_timer - dt);
+        if (wave_break_timer <= 0) {
+            start_next_wave();
+        }
+        return;
+    }
+
+    if (is_undefined(current_wave_state)) {
+        start_next_wave();
+        return;
+    }
+
+    if (wave_intro_delay > 0) {
+        return;
+    }
+
+    wave_elapsed += dt;
+
+    while (wave_spawn_index < array_length(wave_spawn_events)) {
+        var event = wave_spawn_events[wave_spawn_index];
+        if (wave_elapsed + 0.0001 < event.time) {
+            break;
+        }
+
+        spawn_enemy_from_event(event);
+        wave_spawn_index += 1;
+    }
+
+    if (!current_wave_state.cleared) {
+        if (wave_spawn_index >= array_length(wave_spawn_events) && instance_number(obj_Enemy) == 0) {
+            complete_current_wave();
+        }
+    }
+}
+
+function complete_current_wave() {
+    if (is_undefined(current_wave_state)) return;
+
+    current_wave_state.cleared = true;
+    completed_waves += 1;
+    wave_number = completed_waves + 1;
+
+    spawn_floating_text("Wave " + string(current_wave_state.wave_number) + " cleared!", room_width / 2, 120, c_lime);
+    focus = clamp_value(focus + 12, 0, 100);
+    nova_charge = clamp_value(nova_charge + 12, 0, nova_charge_max);
+    add_screen_shake(4, 0.25);
+
+    current_wave_state = undefined;
+    wave_spawn_events = [];
+    wave_spawn_index = 0;
+    wave_elapsed = 0;
+    wave_preview_text = "";
+    wave_intro_delay = 0;
+    wave_break_timer = max(0.9, 1.4 - enemy_scaling.level * 0.05);
+
+    update_enemy_scaling();
+}
+
+function update_enemy_scaling() {
+    enemy_scaling.level += 1;
+    enemy_scaling.hpMultiplier = min(3.25, enemy_scaling.hpMultiplier + 0.08);
+    enemy_scaling.hpBonus = min(18, enemy_scaling.hpBonus + 0.6);
+    enemy_scaling.speedMultiplier = min(2, enemy_scaling.speedMultiplier + 0.03);
+    enemy_scaling.countMultiplier = min(3.2, enemy_scaling.countMultiplier + 0.05);
+    enemy_scaling.cadenceMultiplier = min(2.6, enemy_scaling.cadenceMultiplier + 0.04);
 }
 
 function update_particles() {
@@ -551,6 +867,8 @@ function reset_game() {
     screen_shake_y = 0;
     screen_shake_timer = 0;
     screen_shake_intensity = 0;
+
+    init_wave_manager();
 }
 
 function init_background() {
@@ -657,11 +975,75 @@ function enemy_apply_type_profile(_enemy) {
                 }
                 break;
 
+            case EnemyKind.SPORE_PUFF:
+                visual_kind = "organic";
+                accent_color = make_color_rgb(140, 210, 255);
+                secondary_color = make_color_rgb(80, 140, 200);
+                enemy_radius = max(enemy_radius, 30);
+                zigzag_amplitude = 70;
+                zigzag_speed = 200;
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.65);
+                spore_interval = random_range_value(2.6, 4.4);
+                spore_timer = random_range_value(spore_interval * 0.4, spore_interval);
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 5;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            case EnemyKind.BULWARK_GLOOB:
+                visual_kind = "mechanical";
+                accent_color = make_color_rgb(200, 220, 255);
+                secondary_color = c_dkgray;
+                enemy_radius = max(enemy_radius, 38);
+                enemy_shield = max(enemy_shield, 6);
+                shield_arc = 220;
+                shield_spin = random_range_value(28, 46);
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.72);
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 10;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
+            case EnemyKind.WARP_STALKER:
+                visual_kind = "crystal";
+                accent_color = make_color_rgb(170, 120, 255);
+                secondary_color = make_color_rgb(60, 40, 120);
+                enemy_radius = max(enemy_radius, 28);
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 1.05);
+                warp_interval = random_range_value(2.2, 4.2);
+                warp_timer = random_range_value(1.0, warp_interval);
+                warp_flash_timer = 0;
+                break;
+
+            case EnemyKind.AEGIS_SENTINEL:
+                visual_kind = "mechanical";
+                accent_color = make_color_rgb(255, 215, 120);
+                secondary_color = make_color_rgb(120, 90, 50);
+                enemy_radius = max(enemy_radius, 36);
+                enemy_shield = max(enemy_shield, 4);
+                shield_arc = max(shield_arc, 160);
+                base_speed = max(base_speed, BASE_ENEMY_SPEED * 0.82);
+                support_interval = random_range_value(2.2, 3.4);
+                support_timer = support_interval * 0.5;
+                support_flash = 0;
+                if (enemy_max_hp <= 1) {
+                    enemy_max_hp = 9;
+                    enemy_hp = enemy_max_hp;
+                }
+                break;
+
             default:
                 base_speed = max(base_speed, enemy_speed);
         }
 
         base_speed = max(base_speed, 40);
+        if (enemy_is_elite) {
+            accent_color = merge_color(accent_color, c_white, 0.35);
+            secondary_color = merge_color(secondary_color, c_white, 0.2);
+            enemy_radius += 2;
+        }
         type_configured = true;
     }
 }

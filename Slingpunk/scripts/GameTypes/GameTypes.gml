@@ -124,13 +124,16 @@ function EnemyWaveScaling(_level, _hpMultiplier, _hpBonus, _speedMultiplier, _co
 }
 
 // Wave enemy config structure
-function WaveEnemyConfig(_type, _hp, _lane, _count, _cadence) {
+function WaveEnemyConfig(_type, _hp, _lane, _count, _cadence, _speedScale = 1, _eliteChance = 0, _spawnOffset = 0) {
     return {
         type: _type,
         hp: _hp,
         lane: _lane,
         count: _count,
-        cadence: _cadence
+        cadence: _cadence,
+        speedScale: _speedScale,
+        eliteChance: _eliteChance,
+        spawnOffset: _spawnOffset
     };
 }
 

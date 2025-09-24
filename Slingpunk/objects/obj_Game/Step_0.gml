@@ -43,9 +43,9 @@ update_floating_text();
 // Update impact waves
 update_impact_waves();
 
-// Simple wave management (spawn enemies periodically)
-if (wave_manager_active && wave_intro_delay <= 0) {
-    simple_wave_spawning();
+// Wave management
+if (wave_manager_active) {
+    update_wave_manager();
 }
 
 // Check for game over
