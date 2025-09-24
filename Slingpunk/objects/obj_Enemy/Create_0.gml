@@ -40,3 +40,13 @@ secondary_color = c_dkgray;
 core_color = c_white;
 spikes_count = 6;
 sides_count = 6;
+
+// Ability timers
+spore_timer = 0;
+spore_interval = 0;
+warp_timer = 0;
+warp_interval = 0;
+warp_flash_timer = 0;
+support_timer = 0;
+support_interval = 0;
+support_flash = 0;
