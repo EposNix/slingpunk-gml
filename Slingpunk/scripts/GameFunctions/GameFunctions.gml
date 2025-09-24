@@ -383,7 +383,7 @@ function launch_orb() {
         orb.orb_split_on_impact = modifiers.splitOnImpact;
     }
 
-    launch_cooldown = 0.35 * 60; // Convert to frames
+    launch_cooldown = .35 * 60; // Convert to frames
     focus = clamp_value(focus - 5, 0, 100);
 }
 

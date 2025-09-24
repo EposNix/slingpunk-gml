@@ -53,6 +53,7 @@ screen_shake_intensity = 0;
 
 // Performance profile
 performance_profile = detect_performance_profile();
+game_set_speed(60, gamespeed_fps);
 
 // Enemy scaling
 enemy_scaling = EnemyWaveScaling(0, 1, 0, 1, 1, 1);

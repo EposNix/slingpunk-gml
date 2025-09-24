@@ -3,7 +3,7 @@
 if (!game_running || game_paused) exit;
 
 // Update timers
-launch_cooldown = 0; //max(0, launch_cooldown - 1/60);
+launch_cooldown = max(0, launch_cooldown - 1);
 combo_timer += 1/60;
 wave_intro_delay = max(0, wave_intro_delay - 1/60);
 
