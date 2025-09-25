@@ -313,3 +313,124 @@ function get_major_options(_available_major_modifiers, _count = 3) {
 
     return result;
 }
+
+function select_modifier_from_buckets(_buckets, _weights) {
+    var available = [];
+    var total_weight = 0;
+
+    for (var rarity = 0; rarity < array_length(_buckets); rarity++) {
+        var bucket = _buckets[rarity];
+        if (array_length(bucket) <= 0) {
+            continue;
+        }
+
+        var weight = _weights[rarity];
+        if (weight <= 0) {
+            weight = 1;
+        }
+
+        array_push(available, { rarity: rarity, weight: weight });
+        total_weight += weight;
+    }
+
+    if (total_weight <= 0) {
+        for (var fallback = 0; fallback < array_length(_buckets); fallback++) {
+            var fallback_bucket = _buckets[fallback];
+            if (array_length(fallback_bucket) > 0) {
+                var index = irandom(array_length(fallback_bucket) - 1);
+                var modifier = fallback_bucket[index];
+                fallback_bucket = array_delete(fallback_bucket, index, 1);
+                _buckets[fallback] = fallback_bucket;
+                return modifier;
+            }
+        }
+        return undefined;
+    }
+
+    var roll = random(total_weight);
+    var accumulator = 0;
+
+    for (var i = 0; i < array_length(available); i++) {
+        var entry = available[i];
+        accumulator += entry.weight;
+        if (roll < accumulator) {
+            var rarity_index = entry.rarity;
+            var selected_bucket = _buckets[rarity_index];
+            var choice_index = irandom(array_length(selected_bucket) - 1);
+            var chosen = selected_bucket[choice_index];
+            selected_bucket = array_delete(selected_bucket, choice_index, 1);
+            _buckets[rarity_index] = selected_bucket;
+            return chosen;
+        }
+    }
+
+    return undefined;
+}
+
+function generate_modifier_draft(_state, _context, _available_major_modifiers, _picked_modifiers, _count = 3) {
+    if (is_undefined(_picked_modifiers)) {
+        _picked_modifiers = [];
+    }
+
+    if (is_undefined(_context)) {
+        _context = {};
+    }
+
+    var rarity_buckets = [];
+    var rarity_count = 3;
+    for (var r = 0; r < rarity_count; r++) {
+        array_push(rarity_buckets, []);
+    }
+
+    var upgrade_modifiers = get_upgrade_modifiers();
+
+    for (var i = 0; i < array_length(upgrade_modifiers); i++) {
+        var modifier = upgrade_modifiers[i];
+
+        if (struct_exists(modifier, "available") && !modifier.available(_state, _context)) {
+            continue;
+        }
+
+        if (modifier.rarity != ModifierRarity.COMMON && array_contains(_picked_modifiers, modifier.id)) {
+            continue;
+        }
+
+        var rarity_index = modifier.rarity;
+        array_push(rarity_buckets[rarity_index], modifier);
+    }
+
+    if (!is_undefined(_available_major_modifiers)) {
+        for (var j = 0; j < array_length(_available_major_modifiers); j++) {
+            var major_modifier = _available_major_modifiers[j];
+
+            if (struct_exists(major_modifier, "available") && !major_modifier.available(_state, _context)) {
+                continue;
+            }
+
+            if (array_contains(_picked_modifiers, major_modifier.id)) {
+                continue;
+            }
+
+            var major_rarity = major_modifier.rarity;
+            array_push(rarity_buckets[major_rarity], major_modifier);
+        }
+    }
+
+    var rarity_weights = [];
+    rarity_weights[ModifierRarity.COMMON] = 60;
+    rarity_weights[ModifierRarity.UNCOMMON] = 30;
+    rarity_weights[ModifierRarity.RARE] = 10;
+
+    var draft = [];
+
+    for (var pick = 0; pick < _count; pick++) {
+        var selection = select_modifier_from_buckets(rarity_buckets, rarity_weights);
+        if (is_undefined(selection)) {
+            break;
+        }
+
+        array_push(draft, selection);
+    }
+
+    return draft;
+}

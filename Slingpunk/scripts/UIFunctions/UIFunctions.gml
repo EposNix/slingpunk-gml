@@ -161,9 +161,9 @@ function draw_power_draft() {
     draw_text(center_x, center_y - 120, draft_subtitle);
 
     // Options
-    var option_width = 200;
-    var option_height = 80;
-    var option_spacing = 220;
+    var option_width = 240;
+    var option_height = 130;
+    var option_spacing = 240;
     var start_x = center_x - (array_length(draft_options) - 1) * option_spacing / 2;
 
     for (var i = 0; i < array_length(draft_options); i++) {
@@ -173,7 +173,11 @@ function draw_power_draft() {
 
         // Selection highlight
         if (draft_selection == i) {
-            draw_set_color(c_lime);
+            var highlight_color = c_lime;
+            if (struct_exists(option, "rarity_color")) {
+                highlight_color = option.rarity_color;
+            }
+            draw_set_color(highlight_color);
             draw_rectangle(option_x - option_width/2 - 5, option_y - option_height/2 - 5,
                           option_x + option_width/2 + 5, option_y + option_height/2 + 5, false);
         }
@@ -189,12 +193,22 @@ function draw_power_draft() {
                       option_x + option_width/2, option_y + option_height/2, true);
 
         // Option text
+        var rarity_name = struct_exists(option, "rarity_name") ? option.rarity_name : get_modifier_rarity_name(option.rarity);
+        var rarity_color = struct_exists(option, "rarity_color") ? option.rarity_color : get_modifier_rarity_color(option.rarity);
+
+        if (!is_undefined(rarity_name)) {
+            draw_set_color(rarity_color);
+            draw_text(option_x, option_y - 40, rarity_name);
+        }
+
         draw_set_color(c_white);
-        draw_text(option_x, option_y - 15, option.name);
-        draw_text(option_x, option_y + 15, option.description);
+        draw_text(option_x, option_y - 10, option.name);
+
+        draw_set_color(c_ltgray);
+        draw_text_ext(option_x, option_y + 30, option.description, 0, option_width - 40);
     }
 
-    draw_text(center_x, center_y + 150, "Use arrow keys to select, ENTER to confirm");
+    draw_text(center_x, center_y + 170, "Arrows to select • ENTER / 1-3 / Click to confirm");
 
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
@@ -230,7 +244,11 @@ function show_power_draft(_options, _title, _subtitle) {
     draft_options = _options;
     draft_title = _title;
     draft_subtitle = _subtitle;
-    draft_selection = -1;
+    if (array_length(draft_options) > 0) {
+        draft_selection = 0;
+    } else {
+        draft_selection = -1;
+    }
 }
 
 function hide_power_draft() {
@@ -245,4 +263,30 @@ function show_pause_overlay() {
 
 function hide_pause_overlay() {
     pause_overlay_active = false;
+}
+
+function get_modifier_rarity_name(_rarity) {
+    switch (_rarity) {
+        case ModifierRarity.COMMON:
+            return "Common";
+        case ModifierRarity.UNCOMMON:
+            return "Uncommon";
+        case ModifierRarity.RARE:
+            return "Rare";
+        default:
+            return undefined;
+    }
+}
+
+function get_modifier_rarity_color(_rarity) {
+    switch (_rarity) {
+        case ModifierRarity.COMMON:
+            return c_white;
+        case ModifierRarity.UNCOMMON:
+            return make_color_rgb(120, 200, 255);
+        case ModifierRarity.RARE:
+            return make_color_rgb(255, 170, 64);
+        default:
+            return c_white;
+    }
 }

@@ -40,6 +40,11 @@ background_stars = [];
 
 // Modifiers system
 modifiers = ModifierState();
+available_major_modifiers = get_major_modifiers();
+picked_modifiers = [];
+awaiting_draft_selection = false;
+draft_pending = false;
+draft_options_data = [];
 
 // Wave management
 wave_manager_active = false;
