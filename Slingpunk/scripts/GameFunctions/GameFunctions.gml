@@ -330,6 +330,10 @@ function draw_ui() {
 }
 
 function handle_input() {
+    if (awaiting_draft_selection) {
+        return;
+    }
+
     // Mouse/touch input for aiming and launching
     if (mouse_check_button_pressed(mb_left) && launch_cooldown <= 0) {
         pointer_dragging = true;
@@ -682,6 +686,10 @@ function start_next_wave() {
 function update_wave_manager() {
     var dt = 1 / 60;
 
+    if (awaiting_draft_selection) {
+        return;
+    }
+
     if (wave_break_timer > 0) {
         wave_break_timer = max(0, wave_break_timer - dt);
         if (wave_break_timer <= 0) {
@@ -739,6 +747,7 @@ function complete_current_wave() {
     wave_break_timer = max(0.9, 1.4 - enemy_scaling.level * 0.05);
 
     update_enemy_scaling();
+    start_wave_modifier_draft();
 }
 
 function update_enemy_scaling() {
@@ -748,6 +757,114 @@ function update_enemy_scaling() {
     enemy_scaling.speedMultiplier = min(2, enemy_scaling.speedMultiplier + 0.03);
     enemy_scaling.countMultiplier = min(3.2, enemy_scaling.countMultiplier + 0.05);
     enemy_scaling.cadenceMultiplier = min(2.6, enemy_scaling.cadenceMultiplier + 0.04);
+}
+
+function start_wave_modifier_draft() {
+    var controller = instance_find(obj_Game, 0);
+    if (controller == noone) return;
+
+    with (controller) {
+        if (draft_pending) return;
+
+        var context = {
+            lives: lives,
+            maxLives: MAX_LIVES,
+            wave: completed_waves + 1,
+            modifiersPicked: picked_modifiers
+        };
+
+        var options = generate_modifier_draft(modifiers, context, available_major_modifiers, picked_modifiers, 3);
+
+        if (array_length(options) <= 0) {
+            awaiting_draft_selection = false;
+            draft_pending = false;
+            draft_options_data = [];
+            return;
+        }
+
+        draft_options_data = options;
+        draft_pending = true;
+        awaiting_draft_selection = true;
+        pointer_dragging = false;
+
+        var display_options = [];
+        for (var i = 0; i < array_length(options); i++) {
+            var option = options[i];
+            var display = {
+                id: option.id,
+                name: option.name,
+                description: option.description,
+                rarity: option.rarity,
+                rarity_name: get_modifier_rarity_name(option.rarity),
+                rarity_color: get_modifier_rarity_color(option.rarity)
+            };
+            array_push(display_options, display);
+        }
+
+        var ui = instance_find(obj_UI, 0);
+        if (ui != noone) {
+            var ui_options = display_options;
+            var ui_title = "Draft a Powerup";
+            var ui_subtitle = "Choose one upgrade to enhance your run";
+            with (ui) {
+                show_power_draft(other.ui_options, other.ui_title, other.ui_subtitle);
+            }
+        } else {
+            if (array_length(options) > 0) {
+                draft_options_data = options;
+                confirm_modifier_choice(0);
+            }
+        }
+    }
+}
+
+function confirm_modifier_choice(_selection_index) {
+    var controller = instance_find(obj_Game, 0);
+    if (controller == noone) return;
+
+    with (controller) {
+        if (!draft_pending) return;
+        if (_selection_index < 0 || _selection_index >= array_length(draft_options_data)) return;
+
+        var selection = draft_options_data[_selection_index];
+
+        apply_modifier(modifiers, selection.id);
+        array_push(picked_modifiers, selection.id);
+
+        if (!is_undefined(available_major_modifiers)) {
+            for (var i = array_length(available_major_modifiers) - 1; i >= 0; i--) {
+                if (available_major_modifiers[i].id == selection.id) {
+                    available_major_modifiers = array_delete(available_major_modifiers, i, 1);
+                    break;
+                }
+            }
+        }
+
+        if (selection.id == RunModifierId.RESTORE_HEART) {
+            lives = clamp_value(lives + 1, 0, MAX_LIVES);
+        }
+
+        draft_pending = false;
+        awaiting_draft_selection = false;
+        draft_options_data = [];
+
+        var ui = instance_find(obj_UI, 0);
+        if (ui != noone) {
+            var toast_message = "Selected " + selection.name;
+            with (ui) {
+                hide_power_draft();
+                if (struct_exists(hud_data, "last_modifier")) {
+                    hud_data.last_modifier = selection.id;
+                }
+                if (struct_exists(hud_data, "lives")) {
+                    hud_data.lives = other.lives;
+                }
+                show_toast(other.toast_message, 2000);
+            }
+        }
+
+        wave_break_timer = max(wave_break_timer, 0.6);
+    }
 }
 
 function update_particles() {
@@ -857,6 +974,11 @@ function reset_game() {
 
     // Reset modifiers
     modifiers = ModifierState();
+    available_major_modifiers = get_major_modifiers();
+    picked_modifiers = [];
+    awaiting_draft_selection = false;
+    draft_pending = false;
+    draft_options_data = [];
 
     // Clear effects
     particles = [];
