@@ -144,74 +144,94 @@ function draw_pause_overlay() {
 
 function draw_power_draft() {
     // Modal background
-    draw_set_alpha(0.8);
+    draw_set_alpha(0.82);
     draw_set_color(c_black);
     draw_rectangle(0, 0, display_get_gui_width(), display_get_gui_height(), false);
 
     draw_set_alpha(1);
-    draw_set_color(c_white);
     draw_set_halign(fa_center);
     draw_set_valign(fa_middle);
 
     var center_x = display_get_gui_width() / 2;
     var center_y = display_get_gui_height() / 2;
+    var option_count = array_length(draft_options);
 
-    // Title
-    draw_text(center_x, center_y - 150, draft_title);
-    draw_text(center_x, center_y - 120, draft_subtitle);
+    // Title block
+    draw_set_color(c_white);
+    draw_text(center_x, center_y - 180, draft_title);
+    draw_set_color(c_ltgray);
+    draw_text(center_x, center_y - 146, draft_subtitle);
 
-    // Options
-    var option_width = 240;
-    var option_height = 130;
-    var option_spacing = 240;
-    var start_x = center_x - (array_length(draft_options) - 1) * option_spacing / 2;
-
-    for (var i = 0; i < array_length(draft_options); i++) {
-        var option = draft_options[i];
-        var option_x = start_x + i * option_spacing;
-        var option_y = center_y;
-
-        // Selection highlight
-        if (draft_selection == i) {
-            var highlight_color = c_lime;
-            if (struct_exists(option, "rarity_color")) {
-                highlight_color = option.rarity_color;
-            }
-            draw_set_color(highlight_color);
-            draw_rectangle(option_x - option_width/2 - 5, option_y - option_height/2 - 5,
-                          option_x + option_width/2 + 5, option_y + option_height/2 + 5, false);
-        }
-
-        // Option background
-        draw_set_color(c_dkgray);
-        draw_rectangle(option_x - option_width/2, option_y - option_height/2,
-                      option_x + option_width/2, option_y + option_height/2, false);
-
-        // Option border
-        draw_set_color(c_white);
-        draw_rectangle(option_x - option_width/2, option_y - option_height/2,
-                      option_x + option_width/2, option_y + option_height/2, true);
-
-        // Option text
-        var rarity_name = struct_exists(option, "rarity_name") ? option.rarity_name : get_modifier_rarity_name(option.rarity);
-        var rarity_color = struct_exists(option, "rarity_color") ? option.rarity_color : get_modifier_rarity_color(option.rarity);
-
-        if (!is_undefined(rarity_name)) {
-            draw_set_color(rarity_color);
-            draw_text(option_x, option_y - 40, rarity_name);
-        }
-
-        draw_set_color(c_white);
-        draw_text(option_x, option_y - 10, option.name);
-
-        draw_set_color(c_ltgray);
-        draw_text_ext(option_x, option_y + 30, option.description, 0, option_width - 40);
+    if (option_count <= 0) {
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_top);
+        return;
     }
 
-    draw_text(center_x, center_y + 170, "Arrows to select • ENTER / 1-3 / Click to confirm");
+    // Card layout values
+    var option_width = 260;
+    var option_height = 160;
+    var option_spacing = option_width + 40;
+    var start_x = center_x - (option_count - 1) * option_spacing / 2;
+
+    for (var i = 0; i < option_count; i++) {
+        var option = draft_options[i];
+        var option_x = start_x + i * option_spacing;
+        var lift = (draft_selection == i) ? 12 : 0;
+        var card_top = center_y - option_height / 2 - lift;
+        var card_bottom = center_y + option_height / 2 - lift;
+        var rarity_name = struct_exists(option, "rarity_name") ? option.rarity_name : get_modifier_rarity_name(option.rarity);
+        var rarity_color = struct_exists(option, "rarity_color") ? option.rarity_color : get_modifier_rarity_color(option.rarity);
+        var card_fill = merge_colour(c_black, rarity_color, 0.35);
+        var card_outline = merge_colour(rarity_color, c_white, 0.25);
+
+        // Drop shadow
+        draw_set_alpha(0.35);
+        draw_set_color(c_black);
+        draw_roundrect(option_x - option_width/2 + 6, card_top + 10, option_x + option_width/2 + 6, card_bottom + 10, false);
+
+        // Card body
+        draw_set_alpha(0.95);
+        draw_set_color(card_fill);
+        draw_roundrect(option_x - option_width/2, card_top, option_x + option_width/2, card_bottom, false);
+
+        // Card outline
+        draw_set_alpha(1);
+        draw_set_color(card_outline);
+        draw_roundrect(option_x - option_width/2, card_top, option_x + option_width/2, card_bottom, true);
+
+        // Selection highlight frame
+        if (draft_selection == i) {
+            draw_set_line_width(4);
+            draw_set_color(rarity_color);
+            draw_roundrect(option_x - option_width/2 - 6, card_top - 6, option_x + option_width/2 + 6, card_bottom + 6, true);
+            draw_set_line_width(1);
+        }
+
+        // Rarity label
+        if (!is_undefined(rarity_name)) {
+            draw_set_color(rarity_color);
+            draw_text(option_x, card_top + 28, string_upper(rarity_name));
+        }
+
+        // Modifier name
+        draw_set_color(c_white);
+        draw_text(option_x, card_top + 60, option.name);
+
+        // Description text
+        draw_set_color(c_ltgray);
+        draw_text_ext(option_x, card_top + 94, option.description, 0, option_width - 60);
+    }
+
+    // Instructions
+    draw_set_color(c_white);
+    draw_text(center_x, center_y + option_height / 2 + 60, "Choose one powerup to continue");
+    draw_set_color(c_ltgray);
+    draw_text(center_x, center_y + option_height / 2 + 94, "Left/Right or mouse to browse • ENTER / 1-3 / Click to confirm");
 
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
+    draw_set_alpha(1);
 }
 
 function get_modifier_name(_modifier_id) {
