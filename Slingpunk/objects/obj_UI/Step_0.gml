@@ -1,5 +1,25 @@
 // UI Step Event
 
+var controller = instance_find(obj_Game, 0);
+if (controller != noone) {
+    var last_modifier = hud_data.last_modifier;
+    var data = {
+        score: controller.score,
+        combo_heat: controller.combo_heat,
+        combo_tier: floor(controller.combo_heat / 5),
+        combo_progress: (controller.combo_heat mod 5) / 5,
+        focus: controller.focus,
+        lives: controller.lives,
+        wave: controller.wave_number,
+        last_modifier: last_modifier,
+        special_charge: controller.nova_charge,
+        special_max: controller.nova_charge_max,
+        special_ready: controller.nova_charge >= controller.nova_charge_max,
+        special_name: controller.nova_name
+    };
+    update_hud_data(data);
+}
+
 if (power_draft_active) {
     var option_count = array_length(draft_options);
     if (option_count > 0 && draft_selection < 0) {
@@ -39,15 +59,16 @@ if (power_draft_active) {
     if (option_count > 0) {
         var center_x = display_get_gui_width() / 2;
         var center_y = display_get_gui_height() / 2;
-        var option_width = 240;
-        var option_height = 130;
-        var option_spacing = 240;
+        var option_width = 260;
+        var option_height = 160;
+        var option_spacing = option_width + 40;
         var start_x = center_x - (option_count - 1) * option_spacing / 2;
 
         var hovered_index = -1;
         for (var i = 0; i < option_count; i++) {
             var option_x = start_x + i * option_spacing;
-            var option_y = center_y;
+            var card_lift = (draft_selection == i) ? 12 : 0;
+            var option_y = center_y - card_lift;
             var left = option_x - option_width / 2;
             var right = option_x + option_width / 2;
             var top = option_y - option_height / 2;

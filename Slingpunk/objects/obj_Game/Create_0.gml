@@ -82,3 +82,8 @@ init_wave_manager();
 
 // Start the game
 start_game();
+
+// Ensure the UI controller exists so modal drafts can display correctly
+if (!instance_exists(obj_UI)) {
+    instance_create_layer(0, 0, "Instances", obj_UI);
+}
